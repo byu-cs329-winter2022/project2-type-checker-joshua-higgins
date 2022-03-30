@@ -39,13 +39,13 @@ The type-checker must eventually prove the following language features. The nota
 * `CompilationUnit:void` (provided)
 * `Block:void` (provided)
 * `VariableDeclarationStatement:void` (provided)
-* `ExpressionStatement:void` for `Assignment`
-* `IfStatement:void`
-* `WhileStatement:void`
-* `ReturnStatement:void`
+* `ExpressionStatement:void` for `Assignment` (Finished)
+* `IfStatement:void` (Finished)
+* `WhileStatement:void` (Finished)
+* `ReturnStatement:void` (Finished)
 * `PrefixExpression:boolean` for `!`
-* `InfixExpression:int` for `+`, `*`, and `-`
-* `InfixExpression:boolean` for `&&`, `||`, `<`, and `==`
+* `InfixExpression:int` for `+`, `*`, and `-` (Needs testing)
+* `InfixExpression:boolean` for `&&`, `||`, `<`, and `==` (Needs testing)
 * `BooleanLiteral:boolean` (provided)
 * `NumberLiteral:int` (provided)
 * `NullLiteral:nullType` (provided)

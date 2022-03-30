@@ -9,19 +9,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
-import org.eclipse.jdt.core.dom.ASTNode;
-import org.eclipse.jdt.core.dom.ASTVisitor;
-import org.eclipse.jdt.core.dom.Block;
-import org.eclipse.jdt.core.dom.BooleanLiteral;
-import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.eclipse.jdt.core.dom.Expression;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
-import org.eclipse.jdt.core.dom.NullLiteral;
-import org.eclipse.jdt.core.dom.NumberLiteral;
-import org.eclipse.jdt.core.dom.SimpleName;
-import org.eclipse.jdt.core.dom.Statement;
-import org.eclipse.jdt.core.dom.TypeDeclaration;
-import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
+
+import org.eclipse.jdt.core.dom.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicContainer;
 import org.junit.jupiter.api.DynamicNode;
@@ -146,6 +135,93 @@ public class TypeCheckBuilder {
     }
 
     @Override
+    public boolean visit(Assignment node) {
+      pushTypeCheck(new ArrayList<>());
+      SimpleName name = (SimpleName) node.getLeftHandSide();
+      name.accept(this);
+      String leftType = popType();
+
+      Expression rightHandSide = node.getRightHandSide();
+      if (rightHandSide != null) {
+        rightHandSide.accept(this);
+        String rightType = popType();
+        DynamicTest test = generateTypeCompatibleTestAndPushResultingType(leftType, rightType);
+        peekTypeCheck().add(test);
+      }
+
+      if (!TypeCheckTypes.isError(leftType)) {
+        leftType = TypeCheckTypes.VOID;
+      }
+
+      pushType(leftType);
+      return false;
+    }
+
+    @Override
+    public boolean visit(IfStatement node) {
+      pushTypeCheck(new ArrayList<>());
+
+      node.getExpression().accept(this);
+      String ifType = popType();
+
+      DynamicTest test = generateTypeCompatibleTestAndPushResultingType(ifType, TypeCheckTypes.BOOL);
+      peekTypeCheck().add(test);
+
+      node.getThenStatement().accept(this);
+      String thenType = popType();
+      if (thenType != TypeCheckTypes.VOID) thenType = TypeCheckTypes.ERROR;
+      if (node.getElseStatement() != null) {
+        node.getElseStatement().accept(this);
+        String elseType = popType();
+        if (elseType != TypeCheckTypes.VOID) thenType = TypeCheckTypes.ERROR;
+      }
+
+      if (!TypeCheckTypes.isError(thenType)) {
+        thenType = TypeCheckTypes.VOID;
+      }
+
+      pushType(thenType);
+
+      return false;
+    }
+
+    @Override
+    public boolean visit(WhileStatement node) {
+      pushTypeCheck(new ArrayList<>());
+      node.getExpression().accept(this);
+      String whileType = popType();
+
+      DynamicTest test = generateTypeCompatibleTestAndPushResultingType(whileType, TypeCheckTypes.BOOL);
+      peekTypeCheck().add(test);
+      String type = popType();
+
+      if (!TypeCheckTypes.isError(type)) {
+        type = TypeCheckTypes.VOID;
+      }
+
+      pushType(type);
+      return false;
+    }
+
+    @Override
+    public boolean visit(ReturnStatement node) {
+      pushTypeCheck(new ArrayList<>());
+      node.getExpression().accept(this);
+      String expressionType = popType();
+
+      String returnType = symbolTable.getType("return");
+      DynamicTest test = generateTypeCompatibleTestAndPushResultingType(returnType, expressionType);
+      peekTypeCheck().add(test);
+
+      if (!TypeCheckTypes.isError(returnType)) {
+        returnType = TypeCheckTypes.VOID;
+      }
+
+      pushType(returnType);
+      return false;
+    }
+
+    @Override
     public boolean visit(SimpleName node) {
       pushTypeCheck(new ArrayList<>());
       String name = AstNodePropertiesUtils.getName(node);
@@ -186,6 +262,47 @@ public class TypeCheckBuilder {
     }
 
     @Override
+    public boolean visit(InfixExpression node) {
+      pushTypeCheck(new ArrayList<>());
+      String name = node.toString();
+      String operator = node.getOperator().toString();
+      String type;
+
+      if (operator.equals("+") || operator.equals("*") || operator.equals("-")) {
+        type = TypeCheckTypes.INT;
+      }
+      else if (operator.equals("&&") || operator.equals("||") || operator.equals("==") || operator.equals("<") || operator.equals(">")) {
+        type = TypeCheckTypes.BOOL;
+      }
+      else {
+        type = TypeCheckTypes.ERROR;
+      }
+      pushType(type);
+
+      generateLookupTestAndAddToObligations(name, type);
+      return false;
+    }
+
+    @Override
+    public boolean visit(PrefixExpression node) {
+      pushTypeCheck(new ArrayList<>());
+      String name = node.toString();
+      String operator = node.getOperator().toString();
+      String prefixType;
+
+      if (operator.equals("!")) {
+        prefixType = TypeCheckTypes.BOOL;
+      }
+      else {
+        prefixType = TypeCheckTypes.ERROR;
+      }
+      pushType(prefixType);
+
+      generateLookupTestAndAddToObligations(name, prefixType);
+      return false;
+    }
+
+    @Override
     public void endVisit(CompilationUnit node) {
       String name = "CompilationUnit ";
       generateProofAndAddToObligations(name);
@@ -219,6 +336,30 @@ public class TypeCheckBuilder {
     }
 
     @Override
+    public void endVisit(Assignment node) {
+      String name = generateStatementName();
+      generateProofAndAddToObligations(name);
+    }
+
+    @Override
+    public void endVisit(IfStatement node) {
+      String name = generateStatementName();
+      generateProofAndAddToObligations(name);
+    }
+
+    @Override
+    public void endVisit(WhileStatement node) {
+      String name = generateStatementName();
+      generateProofAndAddToObligations(name);
+    }
+
+    @Override
+    public void endVisit(ReturnStatement node) {
+      String name = generateStatementName();
+      generateProofAndAddToObligations(name);
+    }
+
+    @Override
     public void endVisit(SimpleName node) {
       String name = AstNodePropertiesUtils.getName(node);
       generateProofAndAddToObligations(name);
@@ -238,6 +379,12 @@ public class TypeCheckBuilder {
 
     @Override
     public void endVisit(NullLiteral node) {
+      String name = node.toString();
+      generateProofAndAddToObligations(name);
+    }
+
+    @Override
+    public void endVisit(InfixExpression node) {
       String name = node.toString();
       generateProofAndAddToObligations(name);
     }
