@@ -1,7 +1,6 @@
 package edu.byu.cs329.typechecker;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import edu.byu.cs329.utils.AstNodePropertiesUtils;
 import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayDeque;
@@ -10,6 +9,7 @@ import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 
+import junit.framework.AssertionFailedError;
 import org.eclipse.jdt.core.dom.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicContainer;
@@ -80,7 +80,7 @@ public class TypeCheckBuilder {
         symbolTable.addLocal(entry.getKey(), entry.getValue());
       }
 
-      symbolTable.addLocal("this", className);
+//      symbolTable.addLocal("this", className);
       String type = symbolTable.getType(name);
       symbolTable.addLocal("return", type);
 
@@ -147,19 +147,23 @@ public class TypeCheckBuilder {
         String rightType = popType();
         DynamicTest test = generateTypeCompatibleTestAndPushResultingType(leftType, rightType);
         peekTypeCheck().add(test);
+        leftType = popType();
       }
+      String type = TypeCheckTypes.ERROR;
 
       if (!TypeCheckTypes.isError(leftType)) {
-        leftType = TypeCheckTypes.VOID;
+        type = TypeCheckTypes.VOID;
       }
 
-      pushType(leftType);
+      pushType(type);
       return false;
     }
 
     @Override
     public boolean visit(IfStatement node) {
       pushTypeCheck(new ArrayList<>());
+      //FIXME: do i need scope
+//      symbolTable.pushScope();
 
       node.getExpression().accept(this);
       String ifType = popType();
@@ -168,19 +172,26 @@ public class TypeCheckBuilder {
       peekTypeCheck().add(test);
 
       node.getThenStatement().accept(this);
+//      String thenType = ;
+      //TODO: add a failure test
+      String type = TypeCheckTypes.ERROR;
       String thenType = popType();
-      if (thenType != TypeCheckTypes.VOID) thenType = TypeCheckTypes.ERROR;
+      String elseType = TypeCheckTypes.VOID;
+//      if (popType() == TypeCheckTypes.VOID) type = TypeCheckTypes.VOID;
       if (node.getElseStatement() != null) {
         node.getElseStatement().accept(this);
-        String elseType = popType();
-        if (elseType != TypeCheckTypes.VOID) thenType = TypeCheckTypes.ERROR;
+        elseType = popType();
+        //TODO: add a failure test
+
+//        if (popType() != TypeCheckTypes.VOID) type = TypeCheckTypes.ERROR;
       }
 
-      if (!TypeCheckTypes.isError(thenType)) {
-        thenType = TypeCheckTypes.VOID;
+
+      if (!TypeCheckTypes.isError(thenType) && !TypeCheckTypes.isError(elseType)) {
+        type = TypeCheckTypes.VOID;
       }
 
-      pushType(thenType);
+      pushType(type);
 
       return false;
     }
@@ -188,14 +199,17 @@ public class TypeCheckBuilder {
     @Override
     public boolean visit(WhileStatement node) {
       pushTypeCheck(new ArrayList<>());
+      //FIXME: do i need scope
+//      symbolTable.pushScope();
       node.getExpression().accept(this);
       String whileType = popType();
 
       DynamicTest test = generateTypeCompatibleTestAndPushResultingType(whileType, TypeCheckTypes.BOOL);
       peekTypeCheck().add(test);
-      String type = popType();
+      whileType = popType();
+      String type = TypeCheckTypes.ERROR;
 
-      if (!TypeCheckTypes.isError(type)) {
+      if (!TypeCheckTypes.isError(whileType)) {
         type = TypeCheckTypes.VOID;
       }
 
@@ -212,12 +226,14 @@ public class TypeCheckBuilder {
       String returnType = symbolTable.getType("return");
       DynamicTest test = generateTypeCompatibleTestAndPushResultingType(returnType, expressionType);
       peekTypeCheck().add(test);
+      returnType = popType();
+      String type = TypeCheckTypes.ERROR;
 
       if (!TypeCheckTypes.isError(returnType)) {
-        returnType = TypeCheckTypes.VOID;
+        type = TypeCheckTypes.VOID;
       }
 
-      pushType(returnType);
+      pushType(type);
       return false;
     }
 
@@ -268,6 +284,7 @@ public class TypeCheckBuilder {
       String operator = node.getOperator().toString();
       String type;
 
+      //TODO: add a failure test that enters else statement
       if (operator.equals("+") || operator.equals("*") || operator.equals("-")) {
         type = TypeCheckTypes.INT;
       }
@@ -277,9 +294,9 @@ public class TypeCheckBuilder {
       else {
         type = TypeCheckTypes.ERROR;
       }
-      pushType(type);
 
       generateLookupTestAndAddToObligations(name, type);
+      pushType(type);
       return false;
     }
 
@@ -296,6 +313,7 @@ public class TypeCheckBuilder {
       else {
         prefixType = TypeCheckTypes.ERROR;
       }
+
       pushType(prefixType);
 
       generateLookupTestAndAddToObligations(name, prefixType);
@@ -330,31 +348,19 @@ public class TypeCheckBuilder {
     }
 
     @Override
-    public void endVisit(VariableDeclarationStatement node) {
-      String name = generateStatementName();
-      generateProofAndAddToObligations(name);
-    }
-
-    @Override
-    public void endVisit(Assignment node) {
-      String name = generateStatementName();
-      generateProofAndAddToObligations(name);
-    }
-
-    @Override
     public void endVisit(IfStatement node) {
-      String name = generateStatementName();
-      generateProofAndAddToObligations(name);
+      //FIXME: do i need scope
+//      symbolTable.popScope();
     }
 
     @Override
     public void endVisit(WhileStatement node) {
-      String name = generateStatementName();
-      generateProofAndAddToObligations(name);
+      //FIXME: do i need scope
+//      symbolTable.popScope();
     }
 
     @Override
-    public void endVisit(ReturnStatement node) {
+    public void endVisit(VariableDeclarationStatement node) {
       String name = generateStatementName();
       generateProofAndAddToObligations(name);
     }
@@ -411,14 +417,12 @@ public class TypeCheckBuilder {
       obligations.add(proof);
     }
 
-    private DynamicTest generateTypeCompatibleTestAndPushResultingType(String leftType,
-        String rightType) {
+    private DynamicTest generateTypeCompatibleTestAndPushResultingType(String leftType, String rightType) {
       String displayName = leftType + " := " + rightType;
 
       boolean isAssignmentCompatible = TypeCheckTypes.isAssignmentCompatible(leftType, rightType);
 
-      DynamicTest test =
-          DynamicTest.dynamicTest(displayName, () -> assertTrue(isAssignmentCompatible));
+      DynamicTest test = DynamicTest.dynamicTest(displayName, () -> assertTrue(isAssignmentCompatible));
 
       String type = TypeCheckTypes.VOID;
       if (!isAssignmentCompatible) {
@@ -502,14 +506,13 @@ public class TypeCheckBuilder {
 
   }
 
-
   public TypeCheckBuilder() {
 
   }
 
   /**
    * Returns true if static type safe with the checks.
-   * 
+   *
    * @param symbolTable the environment for the type checks
    * @param node the ASTNode for the compilation unit
    * @param tests a container to hold the tests
