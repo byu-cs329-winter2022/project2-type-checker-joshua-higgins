@@ -16,7 +16,6 @@ jobs:
       with:
         submodules: recursive
         token: ${{ secrets.ACCESS_TOKEN }}
-    - uses: actions/checkout@v2
     - name: mvn install project-utils
       working-directory: ./project-utils
       run: mvn -ntp install
