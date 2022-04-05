@@ -162,8 +162,6 @@ public class TypeCheckBuilder {
     @Override
     public boolean visit(IfStatement node) {
       pushTypeCheck(new ArrayList<>());
-      //FIXME: do i need scope
-//      symbolTable.pushScope();
 
       node.getExpression().accept(this);
       String ifType = popType();
@@ -172,8 +170,6 @@ public class TypeCheckBuilder {
       peekTypeCheck().add(test);
 
       node.getThenStatement().accept(this);
-//      String thenType = ;
-      //TODO: add a failure test
       String type = TypeCheckTypes.ERROR;
       String thenType = popType();
       String elseType = TypeCheckTypes.VOID;
@@ -181,9 +177,6 @@ public class TypeCheckBuilder {
       if (node.getElseStatement() != null) {
         node.getElseStatement().accept(this);
         elseType = popType();
-        //TODO: add a failure test
-
-//        if (popType() != TypeCheckTypes.VOID) type = TypeCheckTypes.ERROR;
       }
 
 
@@ -199,8 +192,7 @@ public class TypeCheckBuilder {
     @Override
     public boolean visit(WhileStatement node) {
       pushTypeCheck(new ArrayList<>());
-      //FIXME: do i need scope
-//      symbolTable.pushScope();
+
       node.getExpression().accept(this);
       String whileType = popType();
 
@@ -284,7 +276,6 @@ public class TypeCheckBuilder {
       String operator = node.getOperator().toString();
       String type;
 
-      //TODO: add a failure test that enters else statement
       if (operator.equals("+") || operator.equals("*") || operator.equals("-")) {
         type = TypeCheckTypes.INT;
       }
@@ -349,14 +340,12 @@ public class TypeCheckBuilder {
 
     @Override
     public void endVisit(IfStatement node) {
-      //FIXME: do i need scope
-//      symbolTable.popScope();
+
     }
 
     @Override
     public void endVisit(WhileStatement node) {
-      //FIXME: do i need scope
-//      symbolTable.popScope();
+
     }
 
     @Override
